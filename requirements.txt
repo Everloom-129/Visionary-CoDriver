@@ -1,0 +1,10 @@
+opencv-python
+numpy
+torch
+torchvision
+supervision
+dds_cloudapi_sdk 
+pillow
+python-dotenv
+pandas
+matplotlib
