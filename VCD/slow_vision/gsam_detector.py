@@ -7,14 +7,22 @@ import cv2
 from PIL import Image
 import supervision as sv
 from pathlib import Path
+import warnings
+
+# Silence specific warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
+warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
+warnings.filterwarnings("ignore", category=UserWarning, message="torch.utils.checkpoint")
+warnings.filterwarnings("ignore", category=UserWarning, message="None of the inputs have requires_grad=True")
+warnings.filterwarnings("ignore", category=UserWarning, message="torch.meshgrid:")
 
 # Add paths for the required models
 sys.path.append(os.path.join(os.getcwd(), "GroundingDINO"))
 sys.path.append(os.path.join(os.getcwd(), "segment_anything"))
 
 config_file = "VCD/slow_vision/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py"
-grounded_checkpoint = "VCD/slow_vision/GroundingDINO/weights/groundingdino_swint_ogc.pth"
-sam_checkpoint = "VCD/slow_vision/GroundingDINO/weights/sam_vit_h_4b8939.pth"
+grounded_checkpoint = "config/weights/groundingdino_swint_ogc.pth"
+sam_checkpoint = "config/weights/sam_vit_h_4b8939.pth"
 # Grounding DINO
 import GroundingDINO.groundingdino.datasets.transforms as T
 from GroundingDINO.groundingdino.models import build_model
@@ -83,24 +91,31 @@ class GSAMDetector:
         if not caption.endswith("."):
             caption = caption + "."
         
+        print(f"Processing prompt: '{caption}'")
+        
         # Move model and image to device
         self.grounding_dino_model = self.grounding_dino_model.to(self.device)
         image_tensor = image_tensor.to(self.device)
         
-        # Run model inference
         with torch.no_grad():
             outputs = self.grounding_dino_model(image_tensor[None], captions=[caption])
         
-        # Process outputs
         logits = outputs["pred_logits"].cpu().sigmoid()[0]  # (nq, 256)
         boxes = outputs["pred_boxes"].cpu()[0]  # (nq, 4)
         
-        # Filter output
+        # Debug: print initial detection counts
+        max_logits = logits.max(dim=1)[0]
+        print(f"Initial detections: {len(max_logits)}, max confidence: {max_logits.max().item():.4f}")
+        
+        # Apply threshold and filter
         logits_filt = logits.clone()
         boxes_filt = boxes.clone()
         filt_mask = logits_filt.max(dim=1)[0] > self.box_threshold
         logits_filt = logits_filt[filt_mask]  # num_filt, 256
         boxes_filt = boxes_filt[filt_mask]  # num_filt, 4
+        
+        # Debug: print filtered counts
+        print(f"After filtering (threshold={self.box_threshold}): {boxes_filt.size(0)} boxes remain")
         
         # Get phrases
         tokenlizer = self.grounding_dino_model.tokenizer
@@ -114,6 +129,12 @@ class GSAMDetector:
                 tokenlizer
             )
             pred_phrases.append(pred_phrase + f"({str(logit.max().item())[:4]})")
+        
+        # Debug: print detected phrases
+        if pred_phrases:
+            print(f"Detected phrases: {', '.join(pred_phrases)}")
+        else:
+            print(f"No phrases detected for threshold={self.text_threshold}")
         
         return boxes_filt, pred_phrases
 
@@ -132,21 +153,17 @@ class GSAMDetector:
                 - labels: Class labels with confidence scores
                 - image: Original image
         """
-        # Load and process image
         image_pil, image_tensor = self._load_image(image_path)
         original_size = image_pil.size  # (width, height)
         
-        # Get bounding boxes from Grounding DINO
         boxes_filt, pred_phrases = self._get_grounding_output(image_tensor, text_prompt)
         
-        # Scale boxes to image size
         H, W = original_size[1], original_size[0]
         for i in range(boxes_filt.size(0)):
             boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
             boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
             boxes_filt[i][2:] += boxes_filt[i][:2]
         
-        # Convert to xyxy format
         boxes_xyxy = boxes_filt.cpu()
         
         # Load image for SAM
@@ -198,7 +215,6 @@ class GSAMDetector:
         class_names = results["class_names"]
         confidences = results["confidences"]
         
-        # Create detections object
         class_ids = np.array([i for i, _ in enumerate(class_names)])
         labels = [f"{cls} {conf:.2f}" for cls, conf in zip(class_names, confidences)]
         detections = sv.Detections(
@@ -208,7 +224,6 @@ class GSAMDetector:
             confidence=np.array(confidences)
         )
         
-        # Create annotators
         box_annotator = sv.BoxAnnotator()
         mask_annotator = sv.MaskAnnotator()
         label_annotator = sv.LabelAnnotator(text_position=sv.Position.CENTER)
@@ -234,11 +249,8 @@ class GSAMDetector:
         
         return boxes, masks
 
-# Example usage
+# Test
 if __name__ == "__main__":
-    # Default model paths
-    
-    # Create detector
     detector = GSAMDetector(
         config_file=config_file,
         grounded_checkpoint=grounded_checkpoint,
@@ -247,14 +259,11 @@ if __name__ == "__main__":
         text_threshold=0.25
     )
     
-    # Example detection
     image_path = "data/JAAD/images/video_0001/00000.png"
     text_prompt = "car. person. "
     output_dir = "results/JAAD"
     
-    # Run detection
     results = detector.detect(image_path, text_prompt)
     
-    # Visualize and save results
     image_name = Path(image_path).stem
     detector.visualize_results(results, output_dir, image_name)

@@ -5,8 +5,18 @@ import supervision as sv
 from collections import Counter
 from pathlib import Path
 import matplotlib.pyplot as plt
+import warnings
+import sys
 
-from VCD.slow_vision.dinox_detector import DINOX
+# Silence TensorFlow warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # 0=all, 1=info, 2=warning, 3=error
+
+# Silence specific warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+from VCD.slow_vision.gsam_detector import GSAMDetector, config_file, grounded_checkpoint, sam_checkpoint
 from VCD.utils.visualization import Visualizer
 from VCD.utils.time_utils import run_time_decorator
 
@@ -31,11 +41,21 @@ class RoadsideAnalyzer:
     """Given an image, detect road, sidewalk, car, and people, and analyze relationships between people and surfaces"""
     
     def __init__(self, config=None):
-        self.dinox_client = DINOX()
+        # self.detector = GSAMDetector() # TODO switch within config?
         self.config = config or {}
-        self.debug = True
+        self.debug = self.config.get('debug', True)
         
-    def detect_road_scene(self, image_path, output_path=None):
+        # Initialize GSAMDetector with defaults
+        # Pass None instead of paths if they don't exist to avoid warnings
+        self.detector = GSAMDetector(
+            config_file=config_file,
+            grounded_checkpoint=grounded_checkpoint,
+            sam_checkpoint=sam_checkpoint,
+            box_threshold=self.config.get('box_threshold', 0.3),
+            text_threshold=self.config.get('text_threshold', 0.25)
+        )
+        
+    def detect_road_scene(self, image_path, text_prompt ="road. sidewalk. person.",output_path=None):
         """
         Detect road, sidewalk, car and people in an image
         
@@ -54,44 +74,89 @@ class RoadsideAnalyzer:
         
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
-        # Define what to detect
-        road_sidewalk_prompt = "road, sidewalk"
-        person_prompt = "person"
-        
-        # Get detections using DINOX API
-        road_predictions = self.dinox_client.get_dinox(image_path, road_sidewalk_prompt)
-        person_predictions = self.dinox_client.get_dinox(image_path, person_prompt)
-        
         # Create a dictionary to store all detected objects
         obj_dict = Counter()
         
-        # Process road/sidewalk detections
-        for i, obj in enumerate(road_predictions):
-            object_type = obj.category.lower().strip()
-            box = np.array(obj.bbox)
-            mask = self.dinox_client.client.task_factory.detection_task.rle2mask(
-                self.dinox_client.client.task_factory.detection_task.string2rle(obj.mask.counts), 
-                obj.mask.size
-            )
-            confidence = obj.score
-            
-            # Add to dictionary
-            index = f"{object_type}{i}"
-            obj_dict[index] = LocationInfo(object_type, i, box, mask, confidence)
+        # First try a combined prompt for all objects
+        all_prompt = "road. sidewalk. person."
+        print("\n--- Trying combined detection with single prompt ---")
+        all_results = self.detector.detect(image_path, all_prompt)
         
-        # Process person detections
-        for i, obj in enumerate(person_predictions):
-            object_type = "person"
-            box = np.array(obj.bbox)
-            mask = self.dinox_client.client.task_factory.detection_task.rle2mask(
-                self.dinox_client.client.task_factory.detection_task.string2rle(obj.mask.counts), 
-                obj.mask.size
-            )
-            confidence = obj.score
+        # Process results if objects were found
+        if len(all_results["boxes"]) > 0:
+            for i, (box, mask, class_name, confidence) in enumerate(zip(
+                all_results["boxes"], 
+                all_results["masks"], 
+                all_results["class_names"], 
+                all_results["confidences"]
+            )):
+                object_type = class_name.lower().strip()
+                
+                # Count objects of each type to assign unique IDs
+                type_count = sum(1 for name, obj in obj_dict.items() if obj.object_type == object_type)
+                
+                # Add to dictionary
+                index = f"{object_type}{type_count}"
+                obj_dict[index] = LocationInfo(object_type, type_count, box, mask, confidence)
+        
+        # If not enough objects were found, try individual prompts
+        if len(obj_dict) < 2:
+            print("\n--- Trying individual detections with separate prompts ---")
             
-            # Add to dictionary
-            index = f"{object_type}{i}"
-            obj_dict[index] = LocationInfo(object_type, i, box, mask, confidence)
+            # Define what to detect
+            road_sidewalk_prompt = "road. sidewalk."
+            person_prompt = "person."
+            
+            # Get road and sidewalk detections
+            print("\n--- Detecting roads and sidewalks ---")
+            road_results = self.detector.detect(image_path, road_sidewalk_prompt)
+            
+            # Process road/sidewalk detections if any found
+            if len(road_results["boxes"]) > 0:
+                for i, (box, mask, class_name, confidence) in enumerate(zip(
+                    road_results["boxes"], 
+                    road_results["masks"], 
+                    road_results["class_names"], 
+                    road_results["confidences"]
+                )):
+                    object_type = class_name.lower().strip()
+                    
+                    # Count objects of each type to assign unique IDs
+                    type_count = sum(1 for name, obj in obj_dict.items() if obj.object_type == object_type)
+                    
+                    # Add to dictionary
+                    index = f"{object_type}{type_count}"
+                    obj_dict[index] = LocationInfo(object_type, type_count, box, mask, confidence)
+            else:
+                print("No road or sidewalk detected in the image.")
+            
+            # Get person detections
+            print("\n--- Detecting people ---")
+            person_results = self.detector.detect(image_path, person_prompt)
+            
+            # Process person detections if any found
+            if len(person_results["boxes"]) > 0:
+                for i, (box, mask, class_name, confidence) in enumerate(zip(
+                    person_results["boxes"], 
+                    person_results["masks"], 
+                    person_results["class_names"], 
+                    person_results["confidences"]
+                )):
+                    object_type = class_name.lower().strip()
+                    
+                    # Count objects of each type to assign unique IDs
+                    type_count = sum(1 for name, obj in obj_dict.items() if obj.object_type == object_type)
+                    
+                    # Add to dictionary
+                    index = f"{object_type}{type_count}"
+                    obj_dict[index] = LocationInfo(object_type, type_count, box, mask, confidence)
+            else:
+                print("No people detected in the image.")
+        
+        # Check if we have any detections at all
+        if not obj_dict:
+            print("No objects detected in the image.")
+            return obj_dict, []
         
         # Analyze relationships between people and surfaces
         p_surface_overlaps = self.analyze_person_surface_relationships(obj_dict)
@@ -187,6 +252,15 @@ class RoadsideAnalyzer:
         plt.imshow(image)
         plt.axis('off')
         
+        # Check if there are objects to visualize
+        if not obj_dict:
+            plt.title("No objects detected", fontsize=20, color='red')
+            # Save the visualization
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            plt.savefig(output_path)
+            plt.close()
+            return
+        
         # Generate random colors for different object types
         colors = {
             'road': [0.1, 0.5, 0.1, 0.5],     # Green
@@ -242,6 +316,12 @@ class RoadsideAnalyzer:
         with open(txt_path, 'w') as f:
             f.write(f"INFO of {img_name}:\n")
             
+            # Check if any objects were detected
+            if not obj_dict:
+                f.write("No objects detected in the image.\n")
+                print(f"Analysis results saved to {txt_path}")
+                return
+            
             # Write information about each detected object
             for name, obj in obj_dict.items():
                 f.write(f"{obj.object_type} {obj.id} has area {obj.get_area()} pixels\n")
@@ -267,14 +347,52 @@ class RoadsideAnalyzer:
 
 # Example usage
 if __name__ == "__main__":
-    analyzer = RoadsideAnalyzer({'debug': True})
-    image_path = "data/JAAD/images/video_0001/00000.png"
-    output_path = "results/JAAD/0001_0001.jpg"
+    # Initialize with configuration
+    analyzer = RoadsideAnalyzer({
+        'debug': True,
+        'box_threshold': 0.25,  # Lower threshold to increase chance of detection
+        'text_threshold': 0.20
+    })
     
-    obj_dict, p_surface_overlaps = analyzer.detect_road_scene(image_path, output_path)
-    print(f"Detected {len(obj_dict)} objects in the image")
+    # Use command line argument for image path if provided
+    if len(sys.argv) > 1:
+        image_path = sys.argv[1]
+    else:
+        # Default image path
+        image_path = "data/JAAD/images/video_0001/00000.png"
     
-    # Print detected relationships
-    for person, surfaces in p_surface_overlaps:
-        if surfaces:
-            print(f"Person {person.id} is on {len(surfaces)} surfaces")
+    try:
+        # Ensure the image exists
+        if not os.path.exists(image_path):
+            print(f"Error: Image {image_path} does not exist.")
+            sys.exit(1)
+            
+        # Create output directory based on image name
+        img_name = os.path.basename(image_path).split('.')[0]
+        img_dir = os.path.basename(os.path.dirname(image_path))
+        output_dir = f"results/JAAD/{img_dir}_{img_name}"
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, f"{img_dir}_{img_name}.jpg")
+        
+        print(f"Analyzing image: {image_path}")
+        print(f"Output will be saved to: {output_dir}")
+        
+        # Run the scene analysis
+        obj_dict, p_surface_overlaps = analyzer.detect_road_scene(image_path, output_path)
+        print(f"Detected {len(obj_dict)} objects in the image")
+        
+        # Print detected relationships
+        for person, surfaces in p_surface_overlaps:
+            if surfaces:
+                surface_str = ', '.join([f"{surface.object_type}" for surface in surfaces])
+                print(f"Person {person.id} is on {len(surfaces)} surfaces: {surface_str}")
+            else:
+                print(f"Person {person.id} is not on any detected surface")
+                
+        print(f"Analysis complete. Results saved to {output_dir}")
+        
+    except Exception as e:
+        import traceback
+        print(f"Error analyzing image: {e}")
+        traceback.print_exc()
+        sys.exit(1)
