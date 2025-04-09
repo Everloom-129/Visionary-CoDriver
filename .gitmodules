@@ -5,3 +5,9 @@
 	path = ml-depth-pro
 	url = https://github.com/apple/ml-depth-pro.git
 
+[submodule "VCD/slow_vision/GroundingDINO"]
+	path = VCD/slow_vision/GroundingDINO
+	url = git@github.com:Everloom-129/GroundingDINO_fork.git
+[submodule "VCD/slow_vision/segment-anything"]
+	path = VCD/slow_vision/segment-anything
+	url = https://github.com/facebookresearch/segment-anything.git
