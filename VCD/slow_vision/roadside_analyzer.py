@@ -33,11 +33,11 @@ class RoadsideAnalyzer:
     def __init__(self, config=None):
         self.dinox_client = GroundingDINO()
         self.config = config or {}
-        self.debug = self.config.get('debug', True)
+        self.debug = True
         
     def detect_road_scene(self, image_path, output_path=None):
         """
-        Detect road, sidewalk, and people in an image
+        Detect road, sidewalk, car and people in an image
         
         Args:
             image_path: Path to the input image
