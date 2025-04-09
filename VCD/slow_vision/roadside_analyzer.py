@@ -6,7 +6,7 @@ from collections import Counter
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-from VCD.slow_vision.DINOX_detector import GroundingDINO
+from VCD.slow_vision.dinox_detector import DINOX
 from VCD.utils.visualization import Visualizer
 from VCD.utils.time_utils import run_time_decorator
 
@@ -31,7 +31,7 @@ class RoadsideAnalyzer:
     """Given an image, detect road, sidewalk, car, and people, and analyze relationships between people and surfaces"""
     
     def __init__(self, config=None):
-        self.dinox_client = GroundingDINO()
+        self.dinox_client = DINOX()
         self.config = config or {}
         self.debug = True
         

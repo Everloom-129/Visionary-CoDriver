@@ -16,31 +16,6 @@ class DINOX:
         self.client = Client(self.config)
         
         
-    def _load_token(self, config_path):
-        """Load API token from config file or environment variable"""
-        if config_path and os.path.exists(config_path):
-            with open(config_path, 'r') as f:
-                return f.read().strip()
-        
-        # Fallback to environment variable
-        token = os.getenv("DDS_CLOUDAPI_TEST_TOKEN")
-        if not token:
-            raise ValueError("API Token not found. Please set DDS_CLOUDAPI_TEST_TOKEN environment variable or provide a config file.")
-        return token
-        
-
-    def _load_token(self, config_path):
-        """Load API token from config file or environment variable"""
-        if config_path and os.path.exists(config_path):
-            with open(config_path, 'r') as f:
-                return f.read().strip()
-        
-        # Fallback to environment variable
-        token = os.getenv("DDS_CLOUDAPI_TEST_TOKEN")
-        if not token:
-            raise ValueError("API Token not found. Please set DDS_CLOUDAPI_TEST_TOKEN environment variable or provide a config file.")
-        return token
-        
     def get_dinox(self, image_path, input_prompts=None):
         if image_path.startswith(('http://', 'https://')):
             infer_image_url = image_path
@@ -144,7 +119,7 @@ class DINOX:
         return boxes, masks
 
 if __name__ == "__main__":
-    dinox = GroundingDINO()
+    dinox = DINOX()
     input_image = "data/JAAD/images/video_0001/00000.png"
     output_dir = "results/JAAD"
     image_file = "00000.png"
