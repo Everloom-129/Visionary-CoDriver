@@ -20,17 +20,16 @@ Visionary-CoDriver/
 │   │   └── roadside_analyzer.py     # GSAM测试
 │   │   └── __init__.py      
 │   ├── fast_vision/ # 30Hz
-│   │   ├── yolox.py             # YOLOX
-│   │   └── bytetracker.py       # MOT
+│   │   ├── ByteTrack/           # YOLOX + ByteTrack
+│   │   ├── bytetracker.py       # MOT
+│   │   ├── speed_estimator.py         # 速度估计模块
+│   │   └── depth_estimator.py         # 深度估计模块
 │   │   └── __init__.py      
 │   ├── fusion/
 │   │   ├── temporal_aligner.py  # 时间对齐
 │   │   └── detector_fusion.py   # 检测结果融合
 │   │   └── __init__.py      
-│   ├── distance/   # 2Hz
-│   │   ├── speed_estimator.py         # 速度估计模块
-│   │   └── depth_estimator.py         # 深度估计模块
-│   │   └── __init__.py      
+    
 │   ├── LLM/       # 2Hz
 │   │   ├── data_parser.py   # 原始数据处理
 │   │   ├── prompt.md        # 提示词
