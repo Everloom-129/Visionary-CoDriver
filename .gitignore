@@ -6,8 +6,13 @@ __pycache__/
 # C extensions
 *.so
 
+# CKPT
+config/weights/
+
+
 # Output files
 output/
+results/
 checkpoints/
 output_videos/
 input_videos/
