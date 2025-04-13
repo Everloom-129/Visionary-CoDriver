@@ -11,3 +11,6 @@
 [submodule "VCD/slow_vision/segment-anything"]
 	path = VCD/slow_vision/segment-anything
 	url = https://github.com/facebookresearch/segment-anything.git
+[submodule "VCD/slow_vision/DPT"]
+	path = VCD/slow_vision/DPT
+	url = https://github.com/Everloom-129/DPT-study
