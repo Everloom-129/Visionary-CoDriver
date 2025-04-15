@@ -14,3 +14,9 @@
 [submodule "VCD/slow_vision/DPT"]
 	path = VCD/slow_vision/DPT
 	url = https://github.com/Everloom-129/DPT-study
+[submodule "VCD/fast_vision/ByteTrack"]
+	path = VCD/fast_vision/ByteTrack
+	url = https://github.com/ifzhang/ByteTrack.git
+[submodule "VCD/fast_vision/YOLOX"]
+	path = VCD/fast_vision/YOLOX
+	url = https://github.com/Megvii-BaseDetection/YOLOX.git
