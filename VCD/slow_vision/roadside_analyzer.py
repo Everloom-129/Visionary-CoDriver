@@ -31,7 +31,7 @@ class LocationInfo:
         self.confidence = confidence    # Detection confidence
         self.distance = None            # Will be populated later
         self.angle = None               # Will be populated later
-        
+            
     def get_area(self):
         """Calculate the area of the object based on its mask"""
         return np.sum(self.mask)
@@ -191,7 +191,7 @@ class RoadsideAnalyzer:
                     continue
                 
                 # Check if the person and the surface overlap
-                overlap, lowest_point = self.is_overlap(person.mask, surface.mask)
+                overlap, lowest_point = self._is_overlap(person.mask, surface.mask)
                 if overlap:
                     overlaps.append(surface)
             
@@ -208,7 +208,7 @@ class RoadsideAnalyzer:
         
         return p_surface_overlaps
     
-    def is_overlap(self, mask_a, mask_b):
+    def _is_overlap(self, mask_a, mask_b):
         """
         Check if the bottom part of mask_a overlaps with mask_b
         
