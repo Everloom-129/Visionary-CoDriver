@@ -18,6 +18,8 @@ python3 bytetracker.py video --path <your_path_to_JAAD_dataset>/JAAD_clips -f By
 python3 track_speed_classifier.py <your_path_to_MOT_results_directory> [threshold]
 ```
 
+python VCD/fast_vision/bytetracker.py video --path data/JAAD/JAAD_clips/ -f VCD/fast_vision/ByteTrack/exps/default/yolox_x.py -c ./config/weights/yolox_x.pt
+
 该指令会读取该目录下所有的 txt 文件，并根据 threshold 来判定是 fast(用1标识) 还是 slow(用0标识)，结果会原地保存在 txt 文件的每一行的最后。
 
 ### 可视化结果
@@ -25,3 +27,4 @@ python3 track_speed_classifier.py <your_path_to_MOT_results_directory> [threshol
 ```bash
 python visualize_tracking.py <your_path_to_video> <your_path_to_person_MOT_txt_file> <your_path_to_car_MOT_txt_file> -o <output_path>
 ```
+
