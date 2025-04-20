@@ -5,6 +5,7 @@ import sys
 def process_tracking_file(file_path, threshold=0.1):
     """
     Process tracking file and add speed classification (0 for slow, 1 for fast).
+    If speed classification already exists, overwrite the original value.
     
     Parameters:
         file_path (str): Path to the tracking file.
@@ -17,6 +18,13 @@ def process_tracking_file(file_path, threshold=0.1):
             lines = f.readlines()
         
         print(f"Read {len(lines)} lines of data")
+        
+        # Check if file already has speed information
+        has_speed_already = False
+        sample_line = lines[0].strip().split(',') if lines else []
+        if len(sample_line) >= 11:
+            has_speed_already = True
+            print(f"File {file_path} already has speed information. Original values will be overwritten.")
         
         # Parse data
         data = []
@@ -100,7 +108,11 @@ def process_tracking_file(file_path, threshold=0.1):
                     # Get speed classification
                     speed = speed_classification.get((frame_id, track_id), 0)
                     
-                    new_line = line.strip() + ',' + str(speed) + '\n'
+                    # If the line already has speed info, replace it
+                    if has_speed_already:
+                        new_line = ','.join(items[:10]) + ',' + str(speed) + '\n'
+                    else:
+                        new_line = line.strip() + ',' + str(speed) + '\n'
                     new_lines.append(new_line)
                 except (ValueError, IndexError):
                     new_lines.append(line)
@@ -111,7 +123,7 @@ def process_tracking_file(file_path, threshold=0.1):
         with open(file_path, 'w') as f:
             f.writelines(new_lines)
         
-        print(f"Processing complete. Speed classification added to {file_path}")
+        print(f"Processing complete. Speed classification added/updated in {file_path}")
         
     except Exception as e:
         print(f"Error processing file: {e}")
