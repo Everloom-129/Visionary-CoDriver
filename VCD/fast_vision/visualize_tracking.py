@@ -8,52 +8,52 @@ from collections import defaultdict
 
 def visualize_tracking_results(video_path, person_tracking_file, car_tracking_file, output_path=None):
     """
-    可视化行人和车辆目标追踪结果，在原始视频上绘制边界框、track_id和速度状态。
+    Visualize person and vehicle tracking results by drawing bounding boxes, track_ids and speed status on the original video.
     
-    参数:
-        video_path (str): 原始视频文件路径
-        person_tracking_file (str): 包含行人追踪结果的txt文件路径
-        car_tracking_file (str): 包含车辆追踪结果的txt文件路径
-        output_path (str): 输出视频的路径，默认为在原视频所在目录添加"_visualized"后缀
+    Parameters:
+        video_path (str): Path to the original video file
+        person_tracking_file (str): Path to txt file with person tracking results
+        car_tracking_file (str): Path to txt file with vehicle tracking results
+        output_path (str): Path for the output video, defaults to adding "_visualized" suffix
     """
-    # 如果未指定输出路径，创建默认输出路径
+    # Create default output path if not specified
     if output_path is None:
         filename, ext = os.path.splitext(video_path)
         output_path = f"{filename}_visualized{ext}"
     
-    # 读取视频
+    # Read video
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"无法打开视频: {video_path}")
+        print(f"Cannot open video: {video_path}")
         return
     
-    # 获取视频属性
+    # Get video properties
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    print(f"视频信息: {width}x{height}, {fps} FPS, {total_frames} 帧")
+    print(f"Video info: {width}x{height}, {fps} FPS, {total_frames} frames")
     
-    # 创建输出视频写入器
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 也可以使用 'XVID'
+    # Create output video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Can also use 'XVID'
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
     
-    # 读取行人跟踪结果文件
+    # Read person tracking results
     person_tracks_by_frame = defaultdict(list)
     
     try:
         with open(person_tracking_file, 'r') as f:
             for line in f:
                 parts = line.strip().split(',')
-                if len(parts) >= 11:  # 确保有足够的字段，包括速度标记
+                if len(parts) >= 11:  # Ensure enough fields, including speed flag
                     frame_id = int(float(parts[0]))
                     track_id = int(float(parts[1]))
                     top = float(parts[2])
                     left = float(parts[3])
                     width_box = float(parts[4])
                     height_box = float(parts[5])
-                    speed_flag = int(parts[10])  # 最后一个字段是速度标记
+                    speed_flag = int(parts[10])  # Last field is speed flag
                     
                     person_tracks_by_frame[frame_id].append({
                         'track_id': track_id,
@@ -62,28 +62,28 @@ def visualize_tracking_results(video_path, person_tracking_file, car_tracking_fi
                         'type': 'person'
                     })
     except Exception as e:
-        print(f"读取行人跟踪文件时出错: {e}")
+        print(f"Error reading person tracking file: {e}")
         cap.release()
         out.release()
         return
     
-    print(f"加载了 {len(person_tracks_by_frame)} 帧的行人跟踪数据")
+    print(f"Loaded person tracking data for {len(person_tracks_by_frame)} frames")
     
-    # 读取车辆跟踪结果文件
+    # Read vehicle tracking results
     car_tracks_by_frame = defaultdict(list)
     
     try:
         with open(car_tracking_file, 'r') as f:
             for line in f:
                 parts = line.strip().split(',')
-                if len(parts) >= 11:  # 确保有足够的字段，包括速度标记
+                if len(parts) >= 11:  # Ensure enough fields, including speed flag
                     frame_id = int(float(parts[0]))
                     track_id = int(float(parts[1]))
                     top = float(parts[2])
                     left = float(parts[3])
                     width_box = float(parts[4])
                     height_box = float(parts[5])
-                    speed_flag = int(parts[10])  # 最后一个字段是速度标记
+                    speed_flag = int(parts[10])  # Last field is speed flag
                     
                     car_tracks_by_frame[frame_id].append({
                         'track_id': track_id,
@@ -92,38 +92,37 @@ def visualize_tracking_results(video_path, person_tracking_file, car_tracking_fi
                         'type': 'car'
                     })
     except Exception as e:
-        print(f"读取车辆跟踪文件时出错: {e}")
+        print(f"Error reading vehicle tracking file: {e}")
         cap.release()
         out.release()
         return
     
-    print(f"加载了 {len(car_tracks_by_frame)} 帧的车辆跟踪数据")
+    print(f"Loaded vehicle tracking data for {len(car_tracks_by_frame)} frames")
     
-    # 合并行人和车辆的帧数据，用于处理
+    # Merge person and vehicle frame data for processing
     all_frames = set(list(person_tracks_by_frame.keys()) + list(car_tracks_by_frame.keys()))
     
-    # 为不同track_id分配不同颜色
-    np.random.seed(42)  # 保证每次运行颜色一致
-    person_color_map = {}  # 行人的颜色映射
-    car_color_map = {}     # 车辆的颜色映射
+    # Assign different colors to different track_ids
+    np.random.seed(42)
+    person_color_map = {}
+    car_color_map = {} 
     
-    # 默认颜色 - 使用整数值
-    person_base_color = (0, 255, 0)  # 绿色为行人基础颜色
-    car_base_color = (0, 0, 255)     # 红色为车辆基础颜色
+    person_base_color = (0, 255, 0)
+    car_base_color = (0, 0, 255) 
     
-    # 处理每一帧
+    # Process each frame
     frame_idx = 0
     while True:
         ret, frame = cap.read()
         if not ret:
             break
         
-        # 在当前帧上绘制所有行人目标
+        # Draw all person objects on current frame
         if frame_idx in person_tracks_by_frame:
             for track in person_tracks_by_frame[frame_idx]:
                 track_id = track['track_id']
                 
-                # 为track_id分配固定的颜色，在行人的基础颜色上变化
+                # Assign fixed color for track_id, varying from person base color
                 if track_id not in person_color_map:
                     person_color_map[track_id] = (
                         int(np.clip(person_base_color[0] + np.random.randint(-50, 50), 0, 255)),
@@ -136,21 +135,21 @@ def visualize_tracking_results(video_path, person_tracking_file, car_tracking_fi
                 speed = track['speed']
                 obj_type = track['type']
                 
-                # 绘制边界框
+                # Draw bounding box
                 y, x, w, h = [int(v) for v in bbox]
                 cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
                 
-                # 准备标签文本
+                # Prepare label text
                 label = f"{obj_type} ID:{track_id} ({speed})"
                 
-                # 选择速度标签的颜色
-                speed_color = (0, 255, 0) if speed == 'slow' else (0, 0, 255)  # 绿色表示慢，红色表示快
+                # Choose color for speed label
+                speed_color = (0, 255, 0) if speed == 'slow' else (0, 0, 255)  # Green for slow, red for fast
                 
-                # 绘制背景矩形以增强文本可见性
+                # Draw background rectangle to enhance text visibility
                 label_size, baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
                 cv2.rectangle(frame, (x, y - label_size[1] - 10), (x + label_size[0], y), color, -1)
                 
-                # 绘制对象类型、ID和速度标签
+                # Draw object type, ID and speed label
                 cv2.putText(
                     frame, 
                     f"{obj_type} ID:{track_id}", 
@@ -161,7 +160,7 @@ def visualize_tracking_results(video_path, person_tracking_file, car_tracking_fi
                     1
                 )
                 
-                # 在边界框下方显示速度
+                # Show speed below bounding box
                 cv2.putText(
                     frame, 
                     speed, 
@@ -172,12 +171,12 @@ def visualize_tracking_results(video_path, person_tracking_file, car_tracking_fi
                     2
                 )
         
-        # 在当前帧上绘制所有车辆目标
+        # Draw all vehicle objects on current frame
         if frame_idx in car_tracks_by_frame:
             for track in car_tracks_by_frame[frame_idx]:
                 track_id = track['track_id']
                 
-                # 为track_id分配固定的颜色，在车辆的基础颜色上变化
+                # Assign fixed color for track_id, varying from vehicle base color
                 if track_id not in car_color_map:
                     car_color_map[track_id] = (
                         int(np.clip(car_base_color[0] + np.random.randint(-50, 50), 0, 255)),
@@ -190,21 +189,21 @@ def visualize_tracking_results(video_path, person_tracking_file, car_tracking_fi
                 speed = track['speed']
                 obj_type = track['type']
                 
-                # 绘制边界框
+                # Draw bounding box
                 y, x, w, h = [int(v) for v in bbox]
                 cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
                 
-                # 准备标签文本
+                # Prepare label text
                 label = f"{obj_type} ID:{track_id} ({speed})"
                 
-                # 选择速度标签的颜色
-                speed_color = (0, 255, 0) if speed == 'slow' else (0, 0, 255)  # 绿色表示慢，红色表示快
+                # Choose color for speed label
+                speed_color = (0, 255, 0) if speed == 'slow' else (0, 0, 255)  # Green for slow, red for fast
                 
-                # 绘制背景矩形以增强文本可见性
+                # Draw background rectangle to enhance text visibility
                 label_size, baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
                 cv2.rectangle(frame, (x, y - label_size[1] - 10), (x + label_size[0], y), color, -1)
                 
-                # 绘制对象类型、ID和速度标签
+                # Draw object type, ID and speed label
                 cv2.putText(
                     frame, 
                     f"{obj_type} ID:{track_id}", 
@@ -215,7 +214,7 @@ def visualize_tracking_results(video_path, person_tracking_file, car_tracking_fi
                     1
                 )
                 
-                # 在边界框下方显示速度
+                # Show speed below bounding box
                 cv2.putText(
                     frame, 
                     speed, 
@@ -226,7 +225,7 @@ def visualize_tracking_results(video_path, person_tracking_file, car_tracking_fi
                     2
                 )
         
-        # 在左上角显示帧索引
+        # Display frame index in top left corner
         cv2.putText(
             frame, 
             f"Frame: {frame_idx}", 
@@ -237,28 +236,28 @@ def visualize_tracking_results(video_path, person_tracking_file, car_tracking_fi
             2
         )
         
-        # 保存处理后的帧
+        # Save processed frame
         out.write(frame)
         
-        # 显示进度
+        # Show progress
         if frame_idx % 100 == 0:
-            print(f"处理帧: {frame_idx}/{total_frames}")
+            print(f"Processing frame: {frame_idx}/{total_frames}")
             
         frame_idx += 1
     
-    # 释放资源
+    # Release resources
     cap.release()
     out.release()
     
-    print(f"可视化完成。输出视频保存到: {output_path}")
+    print(f"Visualization complete. Output video saved to: {output_path}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='可视化行人和车辆目标追踪结果')
-    parser.add_argument('video_path', help='原始视频文件路径')
-    parser.add_argument('person_tracking_file', help='包含行人追踪结果的txt文件路径')
-    parser.add_argument('car_tracking_file', help='包含车辆追踪结果的txt文件路径')
-    parser.add_argument('--output', '-o', help='输出视频路径')
+    parser = argparse.ArgumentParser(description='Visualize person and vehicle tracking results')
+    parser.add_argument('video_path', help='Path to original video file')
+    parser.add_argument('person_tracking_file', help='Path to txt file with person tracking results')
+    parser.add_argument('car_tracking_file', help='Path to txt file with vehicle tracking results')
+    parser.add_argument('--output', '-o', help='Output video path')
     
     args = parser.parse_args()
     

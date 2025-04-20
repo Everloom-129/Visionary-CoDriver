@@ -4,25 +4,25 @@ import sys
 
 def process_tracking_file(file_path, threshold=0.1):
     """
-    处理跟踪文件并添加速度分类（0表示慢，1表示快）。
+    Process tracking file and add speed classification (0 for slow, 1 for fast).
     
-    参数:
-        file_path (str): 跟踪文件的路径。
-        threshold (float): 慢/快分类的阈值。
-                          相对移动大于此阈值将被归类为快速。
+    Parameters:
+        file_path (str): Path to the tracking file.
+        threshold (float): Threshold for slow/fast classification.
+                          Relative movement greater than this threshold will be classified as fast.
     """
     try:
-        # 读取文件
+        # Read file
         with open(file_path, 'r') as f:
             lines = f.readlines()
         
-        print(f"读取了 {len(lines)} 行数据")
+        print(f"Read {len(lines)} lines of data")
         
-        # 解析数据
+        # Parse data
         data = []
         for line in lines:
             items = line.strip().split(',')
-            if len(items) >= 10:  # 确保有足够的元素
+            if len(items) >= 10:  # Ensure enough elements
                 try:
                     frame_id = int(float(items[0]))
                     track_id = int(float(items[1]))
@@ -43,53 +43,52 @@ def process_tracking_file(file_path, threshold=0.1):
                         'center_y': top + height/2
                     })
                 except (ValueError, IndexError) as e:
-                    print(f"解析行时出错: {line.strip()}. 错误: {e}")
+                    print(f"Error parsing line: {line.strip()}. Error: {e}")
         
-        print(f"成功解析了 {len(data)} 条跟踪记录")
+        print(f"Successfully parsed {len(data)} tracking records")
         
-        # 按track_id分组
+        # Group by track_id
         tracks = {}
         for item in data:
             if item['track_id'] not in tracks:
                 tracks[item['track_id']] = []
             tracks[item['track_id']].append(item)
         
-        # 按frame_id对每个轨迹排序
+        # Sort each track by frame_id
         for track_id in tracks:
             tracks[track_id].sort(key=lambda x: x['frame_id'])
         
-        print(f"数据分组为 {len(tracks)} 个唯一轨迹")
+        print(f"Data grouped into {len(tracks)} unique tracks")
         
-        # 计算每条记录的速度
+        # Calculate speed for each record
         speed_classification = {}
         for track_id, track_data in tracks.items():
             for i in range(len(track_data)):
-                if i == 0:  # 该轨迹的第一帧
-                    # 没有前一帧可比较，所以归类为慢速
+                if i == 0:  # First frame of this track
+                    # No previous frame to compare, so classify as slow
                     speed_classification[(track_data[i]['frame_id'], track_id)] = 0
                 else:
                     current = track_data[i]
                     previous = track_data[i-1]
                     
-                    # 计算移动距离
+                    # Calculate movement distance
                     dx = current['center_x'] - previous['center_x']
                     dy = current['center_y'] - previous['center_y']
                     
-                    # 计算相对移动（按物体大小归一化）
-                    # 使用宽度和高度的平均值进行归一化
+                    # Calculate relative movement (normalized by object size)
                     object_size = (current['width'] + current['height']) / 2
                     if object_size > 0:
                         relative_movement = np.sqrt(dx**2 + dy**2) / object_size
                     else:
                         relative_movement = 0
                     
-                    # 归类为慢速或快速
+                    # Classify as slow or fast
                     if relative_movement > threshold:
-                        speed_classification[(current['frame_id'], track_id)] = 1  # 快速
+                        speed_classification[(current['frame_id'], track_id)] = 1  # Fast
                     else:
-                        speed_classification[(current['frame_id'], track_id)] = 0  # 慢速
+                        speed_classification[(current['frame_id'], track_id)] = 0  # Slow
         
-        # 创建带有速度分类的新行
+        # Create new lines with speed classification
         new_lines = []
         for line in lines:
             items = line.strip().split(',')
@@ -98,27 +97,24 @@ def process_tracking_file(file_path, threshold=0.1):
                     frame_id = int(float(items[0]))
                     track_id = int(float(items[1]))
                     
-                    # 获取速度分类
+                    # Get speed classification
                     speed = speed_classification.get((frame_id, track_id), 0)
                     
-                    # 创建带有速度分类的新行
                     new_line = line.strip() + ',' + str(speed) + '\n'
                     new_lines.append(new_line)
                 except (ValueError, IndexError):
-                    # 如果无法解析，则保持行不变
                     new_lines.append(line)
             else:
-                # 如果不符合预期格式，则保持行不变
                 new_lines.append(line)
         
-        # 写入原始文件
+        # Write to original file
         with open(file_path, 'w') as f:
             f.writelines(new_lines)
         
-        print(f"处理完成。速度分类已添加到 {file_path}")
+        print(f"Processing complete. Speed classification added to {file_path}")
         
     except Exception as e:
-        print(f"处理文件时出错: {e}")
+        print(f"Error processing file: {e}")
         sys.exit(1)
 
 def get_all_files_in_directory(directory):
@@ -130,7 +126,7 @@ def get_all_files_in_directory(directory):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("用法: python script.py <tracking_file_dir> [threshold]")
+        print("Usage: python script.py <tracking_file_dir> [threshold]")
         sys.exit(1)
     
     file_dir = sys.argv[1]
@@ -142,4 +138,4 @@ if __name__ == "__main__":
             threshold = float(sys.argv[2])
             process_tracking_file(file_path, threshold)
         else:
-            process_tracking_file(file_path)  # 使用默认阈值0.1
+            process_tracking_file(file_path)  # Use default threshold 0.1
