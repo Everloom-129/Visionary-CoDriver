@@ -20,7 +20,6 @@ from VCD.slow_vision.gsam_detector import GSAMDetector, config_file, grounded_ch
 from VCD.utils.visualization import Visualizer
 from VCD.utils.time_utils import run_time_decorator
 
-@run_time_decorator
 class LocationInfo:
     """Store information about detected objects"""
     def __init__(self, object_type, object_id, box, mask, confidence):
@@ -55,16 +54,11 @@ class RoadsideAnalyzer:
             text_threshold=self.config.get('text_threshold', 0.25)
         )
         
-    def detect_road_scene(self, image_path, text_prompt ="road. sidewalk. person.",output_path=None):
+    def detect_road_scene(self, image_path,output_path=None):
         """
         Detect road, sidewalk, car and people in an image
-        
-        Args:
-            image_path: Path to the input image
-            output_path: Path to save output visualization and results
-            
         Returns:
-            dict: Dictionary of detected objects
+           obj_dict, p_surface_overlaps
         """
         # Read the image
         image = cv2.imread(image_path)
@@ -345,8 +339,8 @@ class RoadsideAnalyzer:
         print(f"Analysis results saved to {txt_path}")
 
 
-# Example usage
-if __name__ == "__main__":
+
+def main():
     # Initialize with configuration
     analyzer = RoadsideAnalyzer({
         'debug': True,
@@ -360,39 +354,39 @@ if __name__ == "__main__":
     else:
         # Default image path
         image_path = "data/JAAD/images/video_0001/00000.png"
-    
-    try:
-        # Ensure the image exists
-        if not os.path.exists(image_path):
-            print(f"Error: Image {image_path} does not exist.")
-            sys.exit(1)
-            
-        # Create output directory based on image name
-        img_name = os.path.basename(image_path).split('.')[0]
-        img_dir = os.path.basename(os.path.dirname(image_path))
-        output_dir = f"results/JAAD/{img_dir}_{img_name}"
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, f"{img_dir}_{img_name}.jpg")
-        
-        print(f"Analyzing image: {image_path}")
-        print(f"Output will be saved to: {output_dir}")
-        
-        # Run the scene analysis
-        obj_dict, p_surface_overlaps = analyzer.detect_road_scene(image_path, output_path)
-        print(f"Detected {len(obj_dict)} objects in the image")
-        
-        # Print detected relationships
-        for person, surfaces in p_surface_overlaps:
-            if surfaces:
-                surface_str = ', '.join([f"{surface.object_type}" for surface in surfaces])
-                print(f"Person {person.id} is on {len(surfaces)} surfaces: {surface_str}")
-            else:
-                print(f"Person {person.id} is not on any detected surface")
-                
-        print(f"Analysis complete. Results saved to {output_dir}")
-        
-    except Exception as e:
-        import traceback
-        print(f"Error analyzing image: {e}")
-        traceback.print_exc()
+
+    # Ensure the image exists
+    if not os.path.exists(image_path):
+        print(f"Error: Image {image_path} does not exist.")
         sys.exit(1)
+        
+    # Create output directory based on image name
+    img_name = os.path.basename(image_path).split('.')[0]
+    img_dir = os.path.basename(os.path.dirname(image_path))
+    output_dir = f"results/JAAD/{img_dir}_{img_name}"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"{img_dir}_{img_name}.jpg")
+    
+    print(f"Analyzing image: {image_path}")
+    print(f"Output will be saved to: {output_dir}")
+    
+    # Run the scene analysis
+    obj_dict, p_surface_overlaps = analyzer.detect_road_scene(image_path, output_path)
+    print(f"Detected {len(obj_dict)} objects in the image")
+    
+    # Print detected relationships
+    for person, surfaces in p_surface_overlaps:
+        if surfaces:
+            surface_str = ', '.join([f"{surface.object_type}" for surface in surfaces])
+            print(f"Person {person.id} is on {len(surfaces)} surfaces: {surface_str}")
+        else:
+            print(f"Person {person.id} is not on any detected surface")
+            
+        
+if __name__ == "__main__":
+    # main()
+    INPUT_DIR = "data/BDD100K/BDD_masks/"
+    OUTPUT_DIR = "results/BDD100K/"
+    
+    for video_dir in os.listdir(INPUT_DIR):
+        analyze_dir(os.path.join(INPUT_DIR, video_dir), os.path.join(OUTPUT_DIR, video_dir))
