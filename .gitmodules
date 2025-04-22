@@ -7,7 +7,7 @@
 
 [submodule "VCD/slow_vision/GroundingDINO"]
 	path = VCD/slow_vision/GroundingDINO
-	url = git@github.com:Everloom-129/GroundingDINO_fork.git
+	url = https://github.com/IDEA-Research/GroundingDINO.git
 [submodule "VCD/slow_vision/segment-anything"]
 	path = VCD/slow_vision/segment-anything
 	url = https://github.com/facebookresearch/segment-anything.git

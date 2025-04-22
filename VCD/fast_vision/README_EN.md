@@ -6,17 +6,15 @@ This module implements an object detection and tracking system using YOLOX+ByteT
 
 1. Install dependencies:
    ```bash
-   # Clone the repository (if you haven't already)
-   git clone https://github.com/your-repo/VCD.git
+   # Clone the repository as well as fetching all submodules (if you haven't already)
+   git clone --recurse-submodules https://github.com/your-repo/VCD.git
    cd VCD
 
    # Install ByteTrack
    cd fast_vision/ByteTrack
+   pip install -r requirements.txt
    pip install -e .
    cd ../..
-   
-   # Install other requirements
-   pip install torch torchvision opencv-python
    ```
 
 2. Download pre-trained weights:
@@ -39,7 +37,7 @@ Example:
 python VCD/fast_vision/bytetracker.py video --path data/JAAD/JAAD_clips/ -f VCD/fast_vision/ByteTrack/exps/default/yolox_x.py -c ./config/weights/yolox_x.pt --save_result
 ```
 
-The tracking results will be saved as text files in the `YOLOX_outputs` directory.
+The tracking results will be saved as text files in the `./YOLOX_outputs` directory. For each video clip, there will be two .txt files, one showing the tracking results for 'person' and the other for 'car'.
 
 #### 2. Calculate Movement Speed for Each Tracked Object
 
@@ -60,7 +58,8 @@ This will generate a visualization of the tracking results overlaid on the origi
 ### Output Format
 
 The MOT results are saved in a standard format where each line represents:
-`<frame_id>,<object_id>,<x>,<y>,<width>,<height>,<confidence>,<class_id>,<speed_class>`
+`<frame_id>,<object_id>,<x>,<y>,<width>,<height>,<confidence>,-1,-1,-1,<speed_class>`
 
 - `speed_class`: 0 for slow movement, 1 for fast movement
+- `-1`: This value has no specific meaning and is not used. It is reserved solely to maintain the standard output format of Bytetrack.
 
