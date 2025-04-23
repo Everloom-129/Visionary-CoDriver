@@ -9,6 +9,7 @@ import supervision as sv
 from pathlib import Path
 import warnings
 
+
 # Silence specific warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
 warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
