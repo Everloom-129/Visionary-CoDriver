@@ -353,7 +353,7 @@ def main():
         image_path = sys.argv[1]
     else:
         # Default image path
-        image_path = "data/JAAD/images/video_0001/00000.png"
+        image_path = "/root/autodl-tmp/JAAD/images/video_0001/00000.png"
 
     # Ensure the image exists
     if not os.path.exists(image_path):
@@ -373,6 +373,8 @@ def main():
     # Run the scene analysis
     obj_dict, p_surface_overlaps = analyzer.detect_road_scene(image_path, output_path)
     print(f"Detected {len(obj_dict)} objects in the image")
+    # print(type(obj_dict['person0'].mask))
+    
     
     # Print detected relationships
     for person, surfaces in p_surface_overlaps:
@@ -384,9 +386,9 @@ def main():
             
         
 if __name__ == "__main__":
-    # main()
-    INPUT_DIR = "data/BDD100K/BDD_masks/"
-    OUTPUT_DIR = "results/BDD100K/"
+    main()
+    # INPUT_DIR = "data/BDD100K/BDD_masks/"
+    # OUTPUT_DIR = "results/BDD100K/"
     
-    for video_dir in os.listdir(INPUT_DIR):
-        analyze_dir(os.path.join(INPUT_DIR, video_dir), os.path.join(OUTPUT_DIR, video_dir))
+    # for video_dir in os.listdir(INPUT_DIR):
+    #     analyze_dir(os.path.join(INPUT_DIR, video_dir), os.path.join(OUTPUT_DIR, video_dir))
