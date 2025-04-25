@@ -13,7 +13,7 @@
 	url = https://github.com/facebookresearch/segment-anything.git
 [submodule "VCD/slow_vision/DPT"]
 	path = VCD/slow_vision/DPT
-	url = https://github.com/Everloom-129/DPT-study
+	url = https://github.com/isl-org/DPT.git
 [submodule "VCD/fast_vision/ByteTrack"]
 	path = VCD/fast_vision/ByteTrack
 	url = https://github.com/ifzhang/ByteTrack.git

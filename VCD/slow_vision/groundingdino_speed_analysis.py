@@ -3,11 +3,13 @@ import time
 import argparse
 from pathlib import Path
 import cv2
+import re
 from groundingdino.util.inference import load_model, load_image, predict, annotate
 
 def process_images(folder_path, model, text_prompt, box_threshold, text_threshold, save_annotated=False):
     """
-    Process all images in the given folder and its subfolders.
+    Process images in the given folder and its subfolders.
+    For each folder, treat images as a video sequence at 30fps and sample at 2Hz.
     Returns total inference time and image count.
     """
     total_time = 0
@@ -16,12 +18,29 @@ def process_images(folder_path, model, text_prompt, box_threshold, text_threshol
     # Supported image extensions
     image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
     
-    # Traverse all subdirectories
-    for root, _, files in os.walk(folder_path):
-        for file in files:
-            # Check if file is an image
-            if any(file.lower().endswith(ext) for ext in image_extensions):
-                image_path = os.path.join(root, file)
+    # Process each subfolder separately
+    for root, dirs, _ in os.walk(folder_path):
+        for dir_name in dirs:
+            subdir_path = os.path.join(root, dir_name)
+            
+            # Get all images in this subfolder
+            image_files = []
+            for file in os.listdir(subdir_path):
+                if any(file.lower().endswith(ext) for ext in image_extensions):
+                    image_files.append(file)
+            
+            # Sort images to ensure sequential order
+            # Assuming filenames contain frame numbers
+            image_files.sort(key=lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 0)
+            
+            # Sample at 2Hz from 30fps - keep every 15th frame
+            sampled_images = image_files[::15]
+            
+            print(f"Folder {subdir_path}: {len(image_files)} total frames, {len(sampled_images)} frames after sampling at 2Hz")
+            
+            # Process sampled images
+            for file in sampled_images:
+                image_path = os.path.join(subdir_path, file)
                 
                 try:
                     # Load image

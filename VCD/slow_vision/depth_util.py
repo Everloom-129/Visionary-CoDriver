@@ -2,10 +2,10 @@ import torch
 import numpy as np
 import cv2
 
-from DPT_module.dpt.models import DPTDepthModel
-from DPT_module.dpt.midas_net import MidasNet_large
-from DPT_module.dpt.transforms import Resize, NormalizeImage, PrepareForNet
-import DPT_module.util.io as DPT_io
+from dpt.models import DPTDepthModel
+from dpt.midas_net import MidasNet_large
+from dpt.transforms import Resize, NormalizeImage, PrepareForNet
+import util.io as DPT_io
 from torchvision.transforms import Compose
 
 DEBUG = False
