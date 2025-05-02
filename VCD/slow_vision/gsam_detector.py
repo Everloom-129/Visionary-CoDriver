@@ -159,6 +159,18 @@ class GSAMDetector:
         
         boxes_filt, pred_phrases = self._get_grounding_output(image_tensor, text_prompt)
         
+        # Check if GroundingDINO found any boxes
+        if boxes_filt.size(0) == 0:
+            print("GroundingDINO found no boxes, skipping SAM.")
+            return {
+                "image": np.array(image_pil),
+                "boxes": np.array([]),
+                "masks": np.array([]),
+                "class_names": [],
+                "confidences": [],
+                "labels": []
+            }
+        
         H, W = original_size[1], original_size[0]
         for i in range(boxes_filt.size(0)):
             boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
@@ -177,26 +189,41 @@ class GSAMDetector:
             boxes_xyxy, image.shape[:2]
         ).to(self.device)
         
-        masks, _, _ = self.predictor.predict_torch(
-            point_coords=None,
-            point_labels=None,
-            boxes=transformed_boxes,
-            multimask_output=False,
-        )
+        # Handle potential empty tensor after transformation or if prediction fails
+        try:
+            masks, _, _ = self.predictor.predict_torch(
+                point_coords=None,
+                point_labels=None,
+                boxes=transformed_boxes,
+                multimask_output=False,
+            )
+            masks_np = masks.cpu().numpy()[:, 0, :, :]  # Remove batch dimension
+        except Exception as e:
+            print(f"Error during SAM prediction: {e}")
+            print("Returning empty masks.")
+            masks_np = np.zeros((0, H, W), dtype=bool)
         
         # Extract class names and confidences
         class_names = []
         confidences = []
         
         for phrase in pred_phrases:
-            class_name, conf_str = phrase.split('(')
-            confidence = float(conf_str[:-1])  # remove the ')'
-            class_names.append(class_name.strip())
-            confidences.append(confidence)
+            try:
+                class_name, conf_str = phrase.split('(')
+                confidence = float(conf_str[:-1])  # remove the ')'
+                class_names.append(class_name.strip())
+                confidences.append(confidence)
+            except ValueError:
+                print(f"Warning: Could not parse phrase '{phrase}'. Skipping.")
+                continue
         
-        # Convert to numpy arrays
+        # Convert boxes to numpy
         boxes_np = boxes_xyxy.numpy()
-        masks_np = masks.cpu().numpy()[:, 0, :, :]  # Remove batch dimension
+        
+        # Ensure mask count matches box count if SAM failed partially
+        if masks_np.shape[0] != boxes_np.shape[0]:
+            print(f"Warning: Mismatch between number of boxes ({boxes_np.shape[0]}) and masks ({masks_np.shape[0]}). Using empty masks.")
+            masks_np = np.zeros((boxes_np.shape[0], H, W), dtype=bool)
         
         return {
             "image": image,
