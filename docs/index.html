@@ -107,7 +107,7 @@
             <div class="publication-links">
               <!-- PDF Link. -->
               <span class="link-block">
-                <a target="_blank" href="https://github.com/Everloom-129/Visionary-CoDriver/docs/vcd_full_paper.pdf"
+                <a target="_blank" href="./vcd_full_paper.pdf"
                    class="external-link button is-normal is-rounded is-dark">
                   <span class="icon">
                       <i class="fas fa-file-pdf"></i>
@@ -150,10 +150,14 @@
       <div class="column is-full">
         <!-- Teaser Video Placeholder -->
         <div style="margin-bottom: 2rem;">
-          <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; background: #f0f0f0; border-radius: 8px;">
-            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #999; font-size: 1.2rem;">
-              Teaser Video Placeholder
-            </div>
+          <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; background: #000; border-radius: 8px;">
+            <video style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 8px;"
+                   controls
+                   playsinline
+                   preload="metadata">
+                <source src="static/videos/notebookLM-video.mp4" type="video/mp4">
+                您的浏览器不支持 HTML5 视频播放。
+            </video>
           </div>
         </div>
         <!-- TLDR Blurb -->
@@ -167,6 +171,29 @@
   </div>
 </section>
 
+<section class="section">
+  <div class="container is-max-widescreen">
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-full">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p style="font-size:125%;">
+            Drivers' perception of risky situations has always been a challenge in driving. Existing risk-detection methods excel at identifying collisions but face challenges in assessing the behavior of road users in non-collision situations. This paper introduces Visionary Co-Driver, a system that leverages large language models (LLMs) to identify non-collision roadside risks and alert drivers based on their eye movements. Specifically, the system combines video processing algorithms and LLMs to identify potentially risky road users. These risks are dynamically indicated on an adaptive heads-up display interface to enhance drivers' attention. A user study with 41 drivers confirms that Visionary Co-Driver improves drivers' risk perception and supports their recognition of roadside risks.
+          </p>
+          <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; background: #000; border-radius: 8px;">
+            <video style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 8px;"
+                   controls
+                   playsinline
+                   preload="metadata">
+                <source src="static/videos/CHI_video.mp4" type="video/mp4">
+                您的浏览器不支持 HTML5 视频播放。
+            </video>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section class="section">
   <div class="container is-max-widescreen">
@@ -175,25 +202,16 @@
         <h2 class="title is-3">Method</h2>
         <div class="content has-text-justified">
           <p style="font-size:125%;">
-            <!-- Placeholder for method content -->
+            Waiting for further information
           </p>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-<section class="section">
-  <div class="container is-max-widescreen">
-    <div class="columns is-centered has-text-centered">
-      <div class="column is-full">
-        <h2 class="title is-3">Sec 1: XXXX</h2>
-        <div class="content has-text-justified">
-          <p style="font-size:125%;">
-            <!-- Placeholder for VLA handoff experiment content -->
-
-            For each section think about high level takeaways to present. 
-
-          </p>
+          <div style="margin-top: 16px;">
+            <img
+              src="static/images/Overall1.png"
+              alt="Visionary Co-Driver Overall Diagram"
+              style="display: block; width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);"
+              loading="lazy"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -204,26 +222,37 @@
   <div class="container is-max-widescreen">
     <div class="columns is-centered has-text-centered">
       <div class="column is-full">
-        <h2 class="title is-3">Sec 2: XXXX</h2>
+        <h2 class="title is-3">User Study</h2>
         <div class="content has-text-justified">
           <p style="font-size:125%;">
-            <!-- Placeholder for Koch real world RL experiment content -->
+            Waiting for further information
           </p>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="container is-max-widescreen">
-    <div class="columns is-centered has-text-centered">
-      <div class="column is-full">
-        <h2 class="title is-3">Sec 3: XXXX</h2>
-        <div class="content has-text-justified">
-          <p style="font-size:125%;">
-            <!-- Placeholder for other simulated experiments content -->
-          </p>
+          <div style="margin-top: 16px;">
+            <img
+              src="static/images/Procedure3.png"
+              alt="User Study Procedure"
+              style="display: block; width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);"
+              loading="lazy"
+            />
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px;">
+            <figure style="margin: 0;">
+              <img
+                src="static/images/Demo.jpg"
+                alt="Visionary Co-Driver Demo"
+                style="display: block; width: 100%; height: 280px; object-fit: cover; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);"
+                loading="lazy"
+              />
+            </figure>
+            <figure style="margin: 0;">
+              <img
+                src="static/images/test_scene.png"
+                alt="Visionary Co-Driver Test Scene"
+                style="display: block; width: 100%; height: 280px; object-fit: cover; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);"
+                loading="lazy"
+              />
+            </figure>
+          </div>
         </div>
       </div>
     </div>
