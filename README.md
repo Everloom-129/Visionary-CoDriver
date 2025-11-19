@@ -2,6 +2,9 @@
 Tony Wang
 2025-03-18
 
+Note: our paper has been accepted to IEEE-ITS
+The GitHub repo and webpage is under construction
+
 ## Overview
 
 This project is a comprehensive system designed to enhance driving safety and efficiency. It integrates various components to provide a complete solution for autonomous driving.
