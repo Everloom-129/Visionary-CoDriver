@@ -15,6 +15,21 @@ This project is a comprehensive system designed to enhance driving safety and ef
 
 ## Installation
 
+### Using pixi (recommended)
+
+```bash
+# From the repository root
+pixi install
+pixi shell
+
+# Inside the pixi shell, install Python packages (incl. torch/torchvision)
+python -m pip install -r requirements.txt
+```
+
+All subsequent `python` and `pip` commands in this repo assume you are inside the pixi shell.
+
+### Alternative: plain pip (no pixi)
+
 ```bash
 pip install -r requirements.txt
 ```

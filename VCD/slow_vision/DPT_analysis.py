@@ -5,11 +5,14 @@ import pandas as pd
 import supervision as sv
 from collections import Counter
 from pathlib import Path
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import warnings
 import argparse
 import math
 import time
+import torch
 from tqdm import tqdm
 
 from VCD.slow_vision.roadside_analyzer import RoadsideAnalyzer
@@ -146,50 +149,64 @@ def process_video_folder(video_folder, output_folder, camera_intrinsics, downsam
     print(f"Processing folder: {video_name}")
     print(f"Total frames: {len(frame_files)}, Downsampled frames: {len(downsampled_frames)}")
     
+    # Surface type → region_category integer (fusion spec)
+    _SURFACE_TO_REGION = {'road': 0, 'sidewalk': 1, 'crosswalk': 2,
+                          'parking': 3, 'grass': 4}
+
     # Process each frame
     for i, frame_file in enumerate(tqdm(downsampled_frames)):
         frame_id = int(os.path.splitext(frame_file)[0])  # Assume filename is frame number
         frame_path = os.path.join(video_folder, frame_file)
-        
+
         # Scene analysis timing
         detection_start = time.time()
-        obj_dict, _ = analyzer.detect_road_scene(frame_path, None)
+        obj_dict, p_surface_overlaps = analyzer.detect_road_scene(frame_path, None)
         detection_end = time.time()
         detection_time = detection_end - detection_start
         total_detection_time += detection_time
-        
+
         # Depth estimation timing
         depth_start = time.time()
         depth_map = predict_depth(
-            frame_path, 
+            frame_path,
             output_path=os.path.join(output_folder, f"{video_name}_{frame_id}_depth.jpg"),
             model_path='config/weights/dpt_large-midas-2f21e586.pt'
         )
         depth_end = time.time()
         depth_time = depth_end - depth_start
         total_depth_time += depth_time
-        
+
         frame_count += 1
-        
+        torch.cuda.empty_cache()
+
+        # Build person_id → surface_type map from overlap analysis
+        surface_map = {}
+        for person, surfaces in p_surface_overlaps:
+            if surfaces:
+                primary = max(surfaces, key=lambda s: s.get_area())
+                surface_map[person.id] = primary.object_type
+            else:
+                surface_map[person.id] = 'unknown'
+
         # Process each detected person
         for obj_key, obj in obj_dict.items():
             if obj_key.startswith("person"):
                 # Extract person ID
                 person_id = obj_key.replace("person", "")
-                
+
                 # Get bounding box and mask
                 x1, y1, x2, y2 = obj.box
                 mask = obj.mask
-                
+
                 # Ensure mask matches depth map dimensions
                 if mask.shape != depth_map.shape:
                     mask = cv2.resize(mask.astype(np.uint8), (depth_map.shape[1], depth_map.shape[0]))
                     mask = mask.astype(bool)
-                
+
                 # Calculate average depth within mask
                 masked_depth = depth_map[mask]
                 avg_depth = np.mean(masked_depth) if len(masked_depth) > 0 else 0
-                
+
                 # Calculate geometric center
                 if np.any(mask):
                     y_indices, x_indices = np.where(mask)
@@ -199,30 +216,31 @@ def process_video_folder(video_folder, output_folder, camera_intrinsics, downsam
                     # Use bounding box center if mask is empty
                     center_x = (x1 + x2) / 2
                     center_y = (y1 + y2) / 2
-                
+
                 # Calculate relative angle
                 angle = calculate_angle(center_x, center_y, camera_intrinsics)
-                
+
                 # Determine distance level
                 distance_level = calculate_distance_level(avg_depth)
 
-                # Determine screen region
-                catagory = calculate_catagory(center_x, center_y)
-                
-                # Store results
+                # Surface type and region category from overlap analysis
+                surface_type = surface_map.get(obj.id, 'unknown')
+                region_category = _SURFACE_TO_REGION.get(surface_type, 5)
+
+                # Store results with fusion-spec column names
                 results.append({
-                    'Frame_id': frame_id,
-                    'Person_id': person_id,
+                    'frame_id': frame_id,
+                    'person_id': person_id,
                     'x1': x1,
                     'y1': y1,
                     'x2': x2,
                     'y2': y2,
-                    'Average_Depth': avg_depth,
-                    'Angle': angle,
-                    'Distance_Level': distance_level,
-                    'X': center_x,
-                    'Y': center_y,
-                    'catagory': catagory,
+                    'confidence': float(obj.confidence),
+                    'avg_depth': avg_depth,
+                    'angle': angle,
+                    'distance_level': distance_level,
+                    'region_category': region_category,
+                    'surface_type': surface_type,
                 })
     
     # Calculate total processing time

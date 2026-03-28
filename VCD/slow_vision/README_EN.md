@@ -2,7 +2,19 @@
 
 ### Setup
 
-1. Install dependencies:
+1. Create and activate the pixi environment (recommended):
+
+   ```bash
+   # From the repository root
+   pixi install
+   pixi shell
+
+   # Inside the pixi shell, install Python packages (incl. torch/torchvision)
+   python -m pip install -r requirements.txt
+   ```
+
+2. Install slow-vision submodules inside the pixi environment:
+
    ```bash
    # Fetch submodules
    git submodule update --remote VCD/slow_vision/GroundingDINO
@@ -21,7 +33,7 @@
    cd ../../..
    ```
 
-2. Download pre-trained weights:
+3. Download pre-trained weights:
    ```bash
    mkdir -p config/weights
    cd config/weights

@@ -17,18 +17,14 @@ warnings.filterwarnings("ignore", category=UserWarning, message="torch.utils.che
 warnings.filterwarnings("ignore", category=UserWarning, message="None of the inputs have requires_grad=True")
 warnings.filterwarnings("ignore", category=UserWarning, message="torch.meshgrid:")
 
-# Add paths for the required models
-sys.path.append(os.path.join(os.getcwd(), "GroundingDINO"))
-sys.path.append(os.path.join(os.getcwd(), "segment_anything"))
-
 config_file = "VCD/slow_vision/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py"
 grounded_checkpoint = "config/weights/groundingdino_swint_ogc.pth"
 sam_checkpoint = "config/weights/sam_vit_h_4b8939.pth"
-# Grounding DINO
-import GroundingDINO.groundingdino.datasets.transforms as T
-from GroundingDINO.groundingdino.models import build_model
-from GroundingDINO.groundingdino.util.slconfig import SLConfig
-from GroundingDINO.groundingdino.util.utils import clean_state_dict, get_phrases_from_posmap
+# Grounding DINO (installed via: pip install -e VCD/slow_vision/GroundingDINO)
+import groundingdino.datasets.transforms as T
+from groundingdino.models import build_model
+from groundingdino.util.slconfig import SLConfig
+from groundingdino.util.utils import clean_state_dict, get_phrases_from_posmap
 
 # Segment Anything Model
 from segment_anything import (

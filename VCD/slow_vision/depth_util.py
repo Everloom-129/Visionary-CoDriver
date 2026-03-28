@@ -1,6 +1,13 @@
-import torch 
+import gc
+import torch
 import numpy as np
 import cv2
+import sys, os
+
+# Ensure DPT's internal `util` package is importable
+_DPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "DPT")
+if _DPT_DIR not in sys.path:
+    sys.path.insert(0, _DPT_DIR)
 
 from dpt.models import DPTDepthModel
 from dpt.midas_net import MidasNet_large
@@ -89,9 +96,11 @@ def predict_depth(image_path, output_path, model_path="DPT_module/weights/dpt_la
             .cpu()
             .numpy()
         )
-    # DPT_io.write_depth(output_path, prediction, bits=2)
-    
-    # print("finished")
+
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
+
     return prediction
 
 def get_distance_category(depth_map, person_mask):

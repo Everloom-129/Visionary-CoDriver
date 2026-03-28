@@ -9,6 +9,8 @@ __pycache__/
 # CKPT
 config/weights/
 
+# input data
+JAAD_clips/
 
 # Output files
 output/

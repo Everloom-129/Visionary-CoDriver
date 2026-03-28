@@ -4,20 +4,31 @@ This module implements an object detection and tracking system using YOLOX+ByteT
 
 ### Setup
 
-1. Install dependencies:
-   ```bash
-   # Clone the repository as well as fetching all submodules (if you haven't already)
+0. Clone the repository as well as fetching all submodules (if you haven't already)
    git clone --recurse-submodules https://github.com/your-repo/VCD.git
    cd VCD
+   
+1. Create and activate the pixi environment (recommended):
 
-   # Install ByteTrack
-   cd fast_vision/ByteTrack
-   pip install -r requirements.txt
-   pip install -e .
-   cd ../..
+   ```bash
+   # From the repository root
+   pixi install
+   pixi shell
+
+   # Inside the pixi shell, install Python packages (incl. torch/torchvision)
+   python -m pip install -r requirements.txt
    ```
 
-2. Download pre-trained weights:
+2. Install ByteTrack inside the pixi environment:
+
+   ```bash
+   cd VCD/fast_vision/ByteTrack
+   pip install -r requirements.txt
+   pip install -e .
+   cd ../../..
+   ```
+
+3. Download pre-trained weights:
    ```bash
    mkdir -p config/weights
    # Download YOLOX-X weights

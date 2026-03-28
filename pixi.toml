@@ -1,0 +1,38 @@
+[workspace]
+name = "visionary-codriver"
+channels = ["pytorch", "nvidia", "conda-forge"]
+platforms = ["linux-64"]
+version = "0.1.0"
+description = "Slow-fast vision fusion for co-driver perception"
+
+[system-requirements]
+cuda = "12.6"
+
+[dependencies]
+python = "3.10.*"
+numpy = ">=1.24"
+pandas = ">=2.0"
+tqdm = "*"
+loguru = "*"
+scipy = ">=1.10"
+matplotlib = ">=3.7"
+pip = "*"
+ninja = "*"
+pytest = "*"
+# CUDA pytorch from pytorch channel (CUDA 12.4 toolkit runs fine on driver 12.6)
+pytorch = {version = ">=2.1,<3", channel = "pytorch"}
+torchvision = {version = ">=0.16", channel = "pytorch"}
+pytorch-cuda = {version = "12.4.*", channel = "pytorch"}
+
+[tasks]
+# Run once after `pixi install`:
+#   - installs opencv-python (conda-forge dropped py310 opencv builds)
+#   - installs ByteTrack dependencies
+#   - compiles yolox C++ extensions for the current Python version
+setup = "pip install 'opencv-python>=4.8' thop lap filterpy tabulate cython_bbox && pip install -e VCD/fast_vision/ByteTrack/ --no-build-isolation"
+
+setup-slow = "pip install transformers timm addict yapf pycocotools supervision && pip install -e VCD/slow_vision/GroundingDINO --no-build-isolation && pip install -e VCD/slow_vision/segment-anything && pip install -e VCD/slow_vision/DPT"
+
+test      = "python VCD/fusion/test_fusion.py"
+pytest    = "pytest VCD/fusion/test_fusion.py -v"
+fast-jaad = "python VCD/fast_vision/bytetracker.py video --path /mnt/sda/edward/data_vcd/JAAD/JAAD_clips/ -f VCD/fast_vision/ByteTrack/exps/default/yolox_x.py -c config/weights/yolox_x.pt --save_result"
