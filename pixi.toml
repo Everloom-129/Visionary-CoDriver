@@ -33,6 +33,10 @@ setup = "pip install 'opencv-python>=4.8' thop lap filterpy tabulate cython_bbox
 
 setup-slow = "pip install transformers timm addict yapf pycocotools supervision && pip install -e VCD/slow_vision/GroundingDINO --no-build-isolation && pip install -e VCD/slow_vision/segment-anything && pip install -e VCD/slow_vision/DPT"
 
-test      = "python VCD/fusion/test_fusion.py"
-pytest    = "pytest VCD/fusion/test_fusion.py -v"
-fast-jaad = "python VCD/fast_vision/bytetracker.py video --path /mnt/sda/edward/data_vcd/JAAD/JAAD_clips/ -f VCD/fast_vision/ByteTrack/exps/default/yolox_x.py -c config/weights/yolox_x.pt --save_result"
+test             = "python VCD/fusion/test_fusion.py"
+pytest           = "pytest VCD/fusion/test_fusion.py -v"
+fast-jaad        = "python VCD/fast_vision/bytetracker.py video --path /mnt/sda/edward/data_vcd/JAAD/JAAD_clips/ -f VCD/fast_vision/ByteTrack/exps/default/yolox_x.py -c config/weights/yolox_x.pt --save_result"
+# Gradio 4.x expects Starlette's pre-1.0 TemplateResponse(name, context). Starlette 1.0
+# breaks the dashboard (Jinja: unhashable type 'dict'). Keep fastapi on 0.115.x as well.
+setup-dashboard  = "pip install 'gradio>=4.40,<5' 'starlette>=0.40,<1' 'fastapi<0.116'"
+dashboard        = "python scripts/run_dashboard.py"
