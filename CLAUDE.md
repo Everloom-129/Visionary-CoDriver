@@ -22,9 +22,11 @@ Video Input (30 Hz)
              DetectorFusion  → IoU-based bbox matching
              Output: fused JSON (FusedDetection records)
                      │
-                     └─► LLM Agent     VCD/agent/
-                           Scene understanding
-                           Co-driver decisions
+                     └─► Agent          VCD/agent/
+                           GOFAI behavior inference
+                           (crossing/approaching/parallel/stationary/receding)
+                           Scene text assembly
+                           GPT-3.5 co-driver reasoning
 ```
 
 ## Data Formats
@@ -107,12 +109,16 @@ frame_id,person_id,x1,y1,x2,y2,confidence,avg_depth,angle,distance_level,region_
 | `DPT/` | Dense Prediction Transformer submodule |
 | `segment-anything/` | Meta SAM submodule |
 
-### Agent (`VCD/agent/`) — **stub, not yet implemented**
+### Agent (`VCD/agent/`) — **implemented**
 | File | Role |
 |------|------|
-| `llm.py` | (empty) LLM integration |
-| `risk_analyzer.py` | (empty) Risk assessment |
-| `prompt.md` | (empty) LLM prompt templates |
+| `risk_analyzer.py` | `BehaviorDescriptor`, `describe_track()`, `analyze_scene()` — GOFAI trajectory-based behavior inference (crossing / approaching / parallel / stationary / receding) over a 1-second sliding window |
+| `llm.py` | `SceneAssembler` (deterministic scene text builder), `LLMClient` (OpenAI wrapper), `run_agent()` / `assemble_scene()` convenience API |
+| `__init__.py` | Exports: `run_agent`, `assemble_scene`, `load_fusion_json` |
+| `__main__.py` | CLI: `python -m VCD.agent <fusion_json> [--scene-only] [--stride 30]` |
+| `prompt.md` | System/user prompt templates, behavior category reference, color scheme |
+
+See `docs/agent_pipeline.md` for full design rationale and examples.
 
 ### Scripts & Config
 | File | Role |
@@ -290,6 +296,39 @@ Solid box = matched (has depth), dashed = fast-only.
 | Fast vision (YOLOX+ByteTrack) | real-time |
 | Fusion (CPU) | real-time |
 | **Full dataset estimate** | ~34 h for all 346 JAAD clips (slow vision dominates) |
+
+## Dashboard (`VCD/dashboard/app.py`)
+
+Launch: `pixi run setup-dashboard && pixi run dashboard` → http://localhost:7888
+
+### Speed / playback calibration
+Timer intervals are calibrated to **30 fps source video** (`1 / (30 × speed_factor)`):
+
+| Label | Interval | Effective display fps (no render overhead) |
+|-------|----------|--------------------------------------------|
+| 0.2x  | 167 ms   | 6 fps  |
+| 0.5x  | 67 ms    | 15 fps |
+| 1x    | 33 ms    | 30 fps |
+| 1.5x  | 22 ms    | 45 fps |
+| 2x    | 17 ms    | 60 fps |
+
+Actual display fps is capped by render time (~10–30 ms/frame with cached cap).
+DataFrames are **not** updated during timer ticks (only image + slider) to reduce Gradio
+round-trip overhead; tables refresh on scrub/step/pause.
+
+### VideoCapture caching (sequential-read optimization)
+`_get_frame()` keeps one `cv2.VideoCapture` open per video path in `_cap_store`.
+For sequential timer ticks (frame N → N+1) it calls `cap.read()` with **no seek**.
+Only random-access (step buttons, slider scrub) triggers `cap.set(CAP_PROP_POS_FRAMES)`.
+This avoids the 100–300 ms H.264 keyframe-seek penalty on every tick.
+
+### Known data gap — fast results frame coverage
+`*_person.txt` files from ByteTrack only contain rows for frames where ≥1 person is
+tracked. When all tracks are lost near the end of a clip, trailing frames are absent.
+
+**video_0001 example:** video has 600 frames (0–599) but `video_0001_person.txt`
+only covers frames 0–580 (tracks lost at frame 581+). The dashboard renders the raw
+video frame for 581–599 with no overlay (correct behaviour; no data to show).
 
 ## Adding New Detection Classes
 

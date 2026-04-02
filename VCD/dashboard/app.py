@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import re
 import cv2
 import numpy as np
 import pandas as pd
@@ -47,6 +48,7 @@ if _ROOT not in sys.path:
 
 from VCD.fusion.temporal_aligner import load_fast_detections, load_slow_detections
 from VCD.fusion.data_schema import FastDetection, SlowDetection
+from VCD.agent.risk_analyzer import analyze_scene, BehaviorDescriptor, most_critical
 
 # ── Visual constants ─────────────────────────────────────────────────────
 _FONT       = cv2.FONT_HERSHEY_SIMPLEX
@@ -71,6 +73,51 @@ _REGION_LABELS = {
     3: "parking", 4: "grass", 5: "unknown",
 }
 _DIST_LABELS = {1: "very close", 2: "close", 3: "medium", 4: "far"}
+
+# Behaviour badge colours (BGR) — keyed by motion_type
+_MOTION_COLORS: Dict[str, Tuple[int, int, int]] = {
+    "crossing":    (0,  40, 220),   # red       — highest danger
+    "approaching": (0, 130, 255),   # orange    — closing distance
+    "parallel":    (0, 200, 220),   # yellow    — lateral, monitor
+    "stationary":  (60, 170,  60),  # green     — overridden to amber if on road
+    "receding":    (160, 110,  50), # blue-gray — moving away
+}
+
+# Per-clip LLM agent cache: stem → (response_text, {track_id: risk_level})
+_agent_cache: Dict[str, Tuple[str, Dict[int, str]]] = {}
+
+# Speed label → timer interval (seconds per 1-frame advance) based on 30 fps source
+# At 30 fps: 1x = 33 ms/frame, 0.5x = 67 ms/frame, etc.
+_SPEED_INTERVALS = {
+    "0.2x": 0.167,   # 1/(30×0.2)
+    "0.5x": 0.067,   # 1/(30×0.5)
+    "1x":   0.033,   # 1/30
+    "1.5x": 0.022,   # 1/45
+    "2x":   0.017,   # 1/60
+}
+
+# ── Persistent VideoCapture cache ─────────────────────────────────────────
+# Keeps one cap open per video path so sequential timer ticks can call
+# cap.read() without seeking, avoiding the H.264 keyframe-seek overhead
+# (~100-300 ms per seek vs ~5-15 ms for a sequential read on NVMe).
+_cap_store: Dict[str, cv2.VideoCapture] = {}
+_cap_pos:   Dict[str, int]             = {}  # last frame index read
+
+
+def _get_frame(video_path: str, frame_idx: int) -> Optional[np.ndarray]:
+    """Return BGR frame, reusing the open cap and skipping seek when sequential."""
+    cap = _cap_store.get(video_path)
+    if cap is None or not cap.isOpened():
+        cap = cv2.VideoCapture(video_path)
+        _cap_store[video_path] = cap
+        _cap_pos[video_path]   = -1
+
+    if frame_idx != _cap_pos.get(video_path, -1) + 1:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+
+    ret, frame = cap.read()
+    _cap_pos[video_path] = frame_idx if ret else -1
+    return frame if ret else None
 
 
 # ── Drawing helpers (ported from scripts/visualize_fusion.py) ────────────
@@ -101,8 +148,13 @@ def _draw_dashed_rect(img: np.ndarray, pt1, pt2, color, thickness=1, gap=8) -> N
             cv2.line(img, p0, p1, color, thickness)
 
 
-def _draw_fused(frame: np.ndarray, rec: dict, is_slow_key: bool) -> None:
-    """Draw one FusedDetection record (replicates visualize_fusion._draw_detection)."""
+def _draw_fused(
+    frame: np.ndarray,
+    rec: dict,
+    is_slow_key: bool,
+    behavior: Optional[BehaviorDescriptor] = None,
+) -> None:
+    """Draw one fused detection with an optional behavior-type badge."""
     bbox = rec.get("bbox_xywh")
     if bbox is None:
         return
@@ -110,25 +162,32 @@ def _draw_fused(frame: np.ndarray, rec: dict, is_slow_key: bool) -> None:
     x2, y2     = x + w, y + h
     track_id   = rec.get("track_id")
     obj_class  = rec.get("object_class") or "obj"
-    speed      = rec.get("speed_class")
     avg_depth  = rec.get("avg_depth")
     angle      = rec.get("angle")
     surface    = rec.get("surface_type") or ""
     region_cat = rec.get("region_category")
     has_slow   = avg_depth is not None
 
-    if track_id is None:
+    # Box colour: behavior-type when available, else fall back to speed class
+    if behavior is not None and track_id is not None:
+        mtype = behavior.motion_type
+        # Stationary on road → amber warning instead of green
+        if mtype == "stationary" and behavior.is_on_road:
+            color = (0, 165, 255)   # amber
+        else:
+            color = _MOTION_COLORS.get(mtype, _COLOR_SLOW)
+    elif track_id is None:
         color = _COLOR_SLOW_ONLY
-    elif speed == 1:
-        color = _COLOR_FAST
     else:
-        color = _COLOR_SLOW
+        color = _COLOR_FAST if rec.get("speed_class") == 1 else _COLOR_SLOW
 
+    thickness = 3 if (behavior and behavior.motion_type in ("crossing", "approaching")) else 2
     if has_slow:
-        cv2.rectangle(frame, (x, y), (x2, y2), color, 2)
+        cv2.rectangle(frame, (x, y), (x2, y2), color, thickness)
     else:
-        _draw_dashed_rect(frame, (x, y), (x2, y2), color, thickness=2)
+        _draw_dashed_rect(frame, (x, y), (x2, y2), color, thickness=thickness)
 
+    # Top label: id + class + depth + angle
     top = f"#{track_id} {obj_class}" if track_id is not None else obj_class
     if avg_depth is not None:
         top += f" | {avg_depth:.1f}m"
@@ -136,6 +195,14 @@ def _draw_fused(frame: np.ndarray, rec: dict, is_slow_key: bool) -> None:
         top += f" {angle:+.0f}\u00b0"
     _label_bg(frame, top, x, y - 2, color)
 
+    # Behavior badge — top-right corner of the box
+    if behavior is not None:
+        badge = behavior.motion_type.upper()[:8]   # e.g. "CROSSING" / "APPROACH"
+        (bw, bh), _ = cv2.getTextSize(badge, _FONT, _FONT_SCALE, _THICK)
+        bx = max(x, x2 - bw - 6)
+        _label_bg(frame, badge, bx, y + bh + 6, color)
+
+    # Surface label — below the box
     surf = surface if (surface and surface != "unknown") else _REGION_LABELS.get(region_cat, "")
     if surf:
         _label_bg(frame, surf, x, y2 + 14, (60, 60, 60))
@@ -267,11 +334,8 @@ def render_frame(
     """Return an annotated RGB frame as a numpy H×W×3 array."""
     frame_idx = int(np.clip(frame_idx, 0, clip.total_frames - 1))
 
-    cap = cv2.VideoCapture(clip.video_path)
-    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-    ret, frame = cap.read()
-    cap.release()
-    if not ret or frame is None:
+    frame = _get_frame(clip.video_path, frame_idx)
+    if frame is None:
         frame = np.full((480, 640, 3), 40, dtype=np.uint8)
         cv2.putText(frame, f"Cannot read frame {frame_idx}", (20, 240),
                     _FONT, 0.8, (200, 200, 200), 2, cv2.LINE_AA)
@@ -305,8 +369,11 @@ def render_frame(
 
     # ── Layer 3: fused detections ─────────────────────────────────────────
     if show_fused:
-        for rec in clip.fused_by_frame.get(frame_idx, []):
-            _draw_fused(frame, rec, is_slow_key)
+        frame_recs = clip.fused_by_frame.get(frame_idx, [])
+        # Trajectory-based behavior analysis (uses sliding window of history)
+        behaviors = analyze_scene(clip.fused_by_frame, frame_idx)
+        for rec in frame_recs:
+            _draw_fused(frame, rec, is_slow_key, behavior=behaviors.get(rec.get("track_id")))
 
     # ── HUD ───────────────────────────────────────────────────────────────
     n_fast  = len(clip.fast_by_frame.get(frame_idx, []))
@@ -365,23 +432,39 @@ def make_tables(
                if slow_rows
                else pd.DataFrame(columns=["id", "surface", "region", "depth_m", "angle_deg", "dist", "slow_fid", "conf"]))
 
-    # Fused table
+    # Fused table — trajectory-based behavior type + situation description
     fused_rows = []
-    for r in clip.fused_by_frame.get(frame_idx, []):
+    frame_recs  = clip.fused_by_frame.get(frame_idx, [])
+    behaviors_tbl = analyze_scene(clip.fused_by_frame, frame_idx)
+    for r in frame_recs:
+        tid = r.get("track_id")
+        b   = behaviors_tbl.get(tid)
         fused_rows.append({
-            "track_id": r.get("track_id"),
-            "class": r.get("object_class"),
-            "speed": "FST" if r.get("speed_class") == 1 else "SLW",
-            "depth_m": round(r["avg_depth"], 2) if r.get("avg_depth") is not None else None,
-            "angle_deg": round(r["angle"], 1) if r.get("angle") is not None else None,
-            "surface": r.get("surface_type"),
-            "iou": round(r["match_iou"], 3) if r.get("match_iou") is not None else None,
+            "track_id":  tid,
+            "motion":    b.motion_type  if b else "—",
+            "behavior":  (b.situation[:70] + "…" if b and len(b.situation) > 70
+                          else b.situation if b else "—"),
+            "depth_m":   round(r["avg_depth"], 2) if r.get("avg_depth")  is not None else None,
+            "angle_deg": round(r["angle"],     1) if r.get("angle")      is not None else None,
+            "surface":   r.get("surface_type"),
+            "iou":       round(r["match_iou"], 3) if r.get("match_iou") is not None else None,
         })
     df_fused = (pd.DataFrame(fused_rows)
                 if fused_rows
-                else pd.DataFrame(columns=["track_id", "class", "speed", "depth_m", "angle_deg", "surface", "iou"]))
+                else pd.DataFrame(columns=["track_id", "motion", "behavior",
+                                           "depth_m", "angle_deg", "surface", "iou"]))
 
     return df_fast, df_slow, df_fused
+
+
+# ── Agent helpers ─────────────────────────────────────────────────────────
+
+def _parse_llm_risks(response: str) -> Dict[int, str]:
+    """Extract {track_id: risk_level} from LLM co-driver response text."""
+    result: Dict[int, str] = {}
+    for m in re.finditer(r"Person\s+track#(\d+)\s*:\s*(low|medium|high)", response, re.IGNORECASE):
+        result[int(m.group(1))] = m.group(2).lower()
+    return result
 
 
 # ── Gradio app ────────────────────────────────────────────────────────────
@@ -392,6 +475,7 @@ def build_app(index: ClipIndex) -> gr.Blocks:
     with gr.Blocks(title="VCD Fusion Dashboard") as app:
         gr.Markdown("## Visionary CoDriver — Fusion Dashboard")
         clip_state = gr.State(value=None)
+        is_playing = gr.State(value=False)
 
         with gr.Row():
             # ── Left panel ────────────────────────────────────────────────
@@ -422,10 +506,62 @@ def build_app(index: ClipIndex) -> gr.Blocks:
                 frame_img = gr.Image(label="Frame", type="numpy", height=600)
                 frame_sl  = gr.Slider(minimum=0, maximum=1, step=1, value=0, label="Frame")
                 with gr.Row():
+                    play_btn    = gr.Button("▶ Play", variant="primary", scale=2)
+                    speed_radio = gr.Radio(
+                        choices=list(_SPEED_INTERVALS.keys()),
+                        value="0.5x",
+                        label="Speed",
+                        scale=5,
+                    )
+                with gr.Row():
                     btn_m10 = gr.Button("-10",  scale=1)
                     btn_m1  = gr.Button("-1",   scale=1)
                     btn_p1  = gr.Button("+1",   scale=1)
                     btn_p10 = gr.Button("+10",  scale=1)
+
+        # ── Agent Reasoning panel ─────────────────────────────────────────
+        with gr.Accordion("Agent Reasoning (Co-Driver LLM)", open=False):
+            gr.Markdown(
+                "Run GPT-3.5 on the current clip's fusion data. "
+                "GOFAI risk scores are pre-computed; the LLM provides natural-language "
+                "scene understanding and risk narrative."
+            )
+            with gr.Row():
+                api_key_box = gr.Textbox(
+                    label="OpenAI API Key",
+                    type="password",
+                    placeholder="sk-...  (or set OPENAI_API_KEY env var)",
+                    scale=5,
+                )
+                stride_sl = gr.Slider(
+                    minimum=15, maximum=90, step=15, value=30,
+                    label="Stride (frames, 30=1s keyframe)",
+                    scale=3,
+                )
+                run_agent_btn = gr.Button("Run Agent (GPT-3.5)", variant="primary", scale=2)
+            agent_output = gr.Textbox(
+                label="Co-Driver Response",
+                lines=14,
+                interactive=False,
+                placeholder=(
+                    "Click 'Run Agent' to analyse the current clip.\n\n"
+                    "The agent will:\n"
+                    "  1. Assemble a scene description from fused detections\n"
+                    "  2. Pre-compute GOFAI risk hints (distance / region / speed / angle)\n"
+                    "  3. Send the text to GPT-3.5 for co-driver reasoning\n\n"
+                    "Note: requires fusion JSON to be available for this clip."
+                ),
+            )
+            scene_txt_output = gr.Textbox(
+                label="Assembled Scene Text (sent to LLM)",
+                lines=8,
+                interactive=False,
+                visible=False,
+            )
+            show_scene_chk = gr.Checkbox(label="Show assembled scene text", value=False)
+
+        # gr.Timer lives outside layout rows (non-visual component)
+        timer = gr.Timer(value=_SPEED_INTERVALS["0.5x"], active=False)
 
         # ── Event handlers ────────────────────────────────────────────────
 
@@ -433,16 +569,16 @@ def build_app(index: ClipIndex) -> gr.Blocks:
             if clip is None:
                 blank = np.full((480, 640, 3), 40, dtype=np.uint8)
                 return blank, pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-            img          = render_frame(clip, int(frame_idx), show_fast, show_slow, show_fused)
+            img = render_frame(clip, int(frame_idx), show_fast, show_slow, show_fused)
             df_f, df_s, df_fu = make_tables(clip, int(frame_idx))
             return img, df_f, df_s, df_fu
 
         def _load(clip_name):
             info = index.get(clip_name)
             if info is None:
-                return (None, "_Clip not found_",
-                        gr.update(), None,
-                        pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
+                return (None, "_Clip not found_", gr.update(), None,
+                        pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
+                        False, gr.update(active=False), "▶ Play")
             clip = load_clip(info)
             tags = []
             if info.slow_csv:    tags.append("slow: YES")
@@ -453,7 +589,9 @@ def build_app(index: ClipIndex) -> gr.Blocks:
                        f"@ {clip.fps:.1f} fps  |  " + "  |  ".join(tags))
             slider_upd = gr.update(maximum=clip.total_frames - 1, value=0)
             img, df_f, df_s, df_fu = _render_all(0, clip, True, True, False)
-            return clip, info_md, slider_upd, img, df_f, df_s, df_fu
+            # Always stop playback when loading a new clip
+            return (clip, info_md, slider_upd, img, df_f, df_s, df_fu,
+                    False, gr.update(active=False), "▶ Play")
 
         def _step(frame_idx, clip, delta, show_fast, show_slow, show_fused):
             if clip is None:
@@ -461,6 +599,56 @@ def build_app(index: ClipIndex) -> gr.Blocks:
             new_idx = int(np.clip(int(frame_idx) + delta, 0, clip.total_frames - 1))
             img, df_f, df_s, df_fu = _render_all(new_idx, clip, show_fast, show_slow, show_fused)
             return new_idx, img, df_f, df_s, df_fu
+
+        def _toggle_play(playing, speed, clip):
+            if clip is None:
+                return False, gr.update(active=False), "▶ Play"
+            new_playing = not playing
+            interval    = _SPEED_INTERVALS.get(speed, 0.1)
+            return (new_playing,
+                    gr.update(active=new_playing, value=interval),
+                    "⏸ Pause" if new_playing else "▶ Play")
+
+        def _tick(frame_idx, clip, show_fast, show_slow, show_fused):
+            """Timer tick: only updates image + slider (skips DataFrames for speed).
+            Sequential reads reuse the cached cap — no H.264 keyframe seek overhead."""
+            if clip is None:
+                return (frame_idx, gr.update(),
+                        False, gr.update(active=False), "▶ Play")
+            new_idx = int(frame_idx) + 1
+            if new_idx >= clip.total_frames:
+                img = render_frame(clip, clip.total_frames - 1, show_fast, show_slow, show_fused)
+                return (clip.total_frames - 1, img,
+                        False, gr.update(active=False), "▶ Play")
+            img = render_frame(clip, new_idx, show_fast, show_slow, show_fused)
+            return (new_idx, img, True, gr.update(), gr.update())
+
+        def _speed_change(speed, playing):
+            interval = _SPEED_INTERVALS.get(speed, 0.1)
+            return gr.update(value=interval, active=playing)
+
+        def _run_agent(clip_name, api_key, stride):
+            info = index.get(clip_name)
+            if info is None:
+                return "No clip selected.", gr.update(visible=False, value="")
+            if info.fusion_json is None:
+                return "No fusion JSON found for this clip.", gr.update(visible=False, value="")
+            try:
+                from VCD.agent.llm import run_agent, assemble_scene
+                scene_text = assemble_scene(info.fusion_json, stride=int(stride))
+                response   = run_agent(
+                    info.fusion_json,
+                    model="gpt-3.5-turbo",
+                    stride=int(stride),
+                    api_key=api_key.strip() if api_key else None,
+                )
+                _agent_cache[clip_name] = (response, _parse_llm_risks(response))
+                return response, gr.update(visible=True, value=scene_text)
+            except Exception as e:
+                return f"Error: {e}", gr.update(visible=False, value="")
+
+        def _toggle_scene_txt(show):
+            return gr.update(visible=show)
 
         # ── Wire events ───────────────────────────────────────────────────
 
@@ -471,7 +659,7 @@ def build_app(index: ClipIndex) -> gr.Blocks:
             _load,
             inputs=[clip_dd],
             outputs=[clip_state, clip_info, frame_sl, frame_img,
-                     tbl_fast, tbl_slow, tbl_fused],
+                     tbl_fast, tbl_slow, tbl_fused, is_playing, timer, play_btn],
         )
 
         frame_sl.release(_render_all, inputs=_render_ins, outputs=_render_outs)
@@ -484,6 +672,36 @@ def build_app(index: ClipIndex) -> gr.Blocks:
                 inputs=[frame_sl, clip_state, chk_fast, chk_slow, chk_fused],
                 outputs=[frame_sl, frame_img, tbl_fast, tbl_slow, tbl_fused],
             )
+
+        play_btn.click(
+            _toggle_play,
+            inputs=[is_playing, speed_radio, clip_state],
+            outputs=[is_playing, timer, play_btn],
+        )
+
+        speed_radio.change(
+            _speed_change,
+            inputs=[speed_radio, is_playing],
+            outputs=[timer],
+        )
+
+        run_agent_btn.click(
+            _run_agent,
+            inputs=[clip_dd, api_key_box, stride_sl],
+            outputs=[agent_output, scene_txt_output],
+        )
+
+        show_scene_chk.change(
+            _toggle_scene_txt,
+            inputs=[show_scene_chk],
+            outputs=[scene_txt_output],
+        )
+
+        timer.tick(
+            _tick,
+            inputs=[frame_sl, clip_state, chk_fast, chk_slow, chk_fused],
+            outputs=[frame_sl, frame_img, is_playing, timer, play_btn],
+        )
 
     return app
 
